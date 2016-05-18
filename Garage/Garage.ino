@@ -188,7 +188,7 @@ void loop()
 #ifdef MY_DEBUG
   Serial.println(lux);
 #endif
-  if (lux != lastlux) {
+  if (lux != lastlux && digital.read(RELAY_1) == (RELAY_OFF ? LOW:HIGH)) {
     send(msgLux.set(lux));
     lastlux = lux;
   }
@@ -201,12 +201,12 @@ void loop()
   Serial.println(tripped2);
   send(msg_M1.set(tripped1 ? "1" : "0")); // Send tripped values to gw
   send(msg_M2.set(tripped2 ? "1" : "0"));
-  if (lux < MinLux && tripped1 && digital.read(RELAY_1) == (RELAY_OFF ? HIGH:LOW)) {
+  if (lastlux < MinLux && tripped1 ) {
      digitalWrite(RELAY_1, RELAY_ON);
-     send(msgRelay.set(1));
-     sleep(OnTime);
+     send(msgRelay.set(true));
+     sleep(OnTime*1000);
      digitalWrite(RELAY_1, RELAY_OFF);
-     send(msgRelay.set(0));
+     send(msgRelay.set(false));
   }
 
   float pressure = bmp.readSealevelPressure(ALTITUDE) / 100.0;
