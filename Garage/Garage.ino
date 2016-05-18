@@ -55,17 +55,17 @@ contributors
 #include <Adafruit_BMP085.h>
 
 #define CHILD_CONFIG 100
-MyMessage mOnTime(CHILD_CONFIG, V_VAR1);   //Ping message
-MyMessage mMinLux(CHILD_CONFIG, V_VAR2);   //Pong message
-MyMessage mTest1(CHILD_CONFIG, V_VAR3);   //Ping message
-MyMessage mTest2(CHILD_CONFIG, V_VAR4);   //Pong message
-MyMessage mTest3(CHILD_CONFIG, V_VAR5);   //Ping message
+MyMessage mOnTime(CHILD_CONFIG, V_VAR1);   //Receive configuration: On-Time
+MyMessage mMinLux(CHILD_CONFIG, V_VAR2);   //Light Level
+MyMessage mTest1(CHILD_CONFIG, V_VAR3);   //Test funktionality for oher projects
+//MyMessage mTest2(CHILD_CONFIG, V_VAR4);   //#2
+//MyMessage mTest3(CHILD_CONFIG, V_VAR5);   //#3
 
-uint16_t OnTime = 600; // Default on-time in case of motion: 10 minutes
-uint16_t MinLux = 100; // Default light level for motion switch-on
+uint16_t OnTime = 300; // Default on-time in case of motion: 5 minutes
+uint16_t MinLux = 800; // Default lowest light level for switch-on in case of motion detection
 char* Test1 ="";
-char* Test2 ="";
-char* Test3 ="";
+//char* Test2 ="";
+//char* Test3 ="";
 
 const float ALTITUDE = 200; // <-- adapt this value to your own location's 
 altitude.
@@ -138,6 +138,12 @@ motion sensor.  (Only 2 and 3 generates interrupt!)
 MyMessage msg_M1(CHILD_ID_M1, V_TRIPPED);
 MyMessage msg_M2(CHILD_ID_M2, V_TRIPPED);
 
+#define RELAY_1  4  // Arduino Digital I/O pin number for first relay (second on pin+1 etc)
+#define NUMBER_OF_RELAYS 1 // Total number of attached relays
+#define RELAY_ON 1
+#define RELAY_OFF 0
+MyMessage msgRelay(RELAY_1,V_LIGHT);
+
 void setup()
 {
   lightSensor.begin();
@@ -148,11 +154,15 @@ void setup()
     while (1) {}
   }
   metric = getConfig().isMetric;
-  pinMode(DIGITAL_INPUT_SENSOR1, INPUT);      // sets the motion sensor 
-digital pin as input
-  pinMode(DIGITAL_INPUT_SENSOR2, INPUT);      // sets the motion sensor 
-digital pin as input
+  pinMode(DIGITAL_INPUT_SENSOR1, INPUT);      // sets the motion sensor digital pin as input
+  pinMode(DIGITAL_INPUT_SENSOR2, INPUT);      // sets the motion sensor digital pin as input
 
+  for (int sensor=1, pin=RELAY_1; sensor<=NUMBER_OF_RELAYS;sensor++, pin++) {
+    // Then set relay pins in output mode
+    pinMode(pin, OUTPUT);   
+    // Set all relays to off 
+    digitalWrite(pin, RELAY_OFF);
+  }
 }
 
 void presentation()  {
@@ -166,7 +176,10 @@ void presentation()  {
   present(CHILD_ID_M1, S_MOTION);
   present(CHILD_ID_M2, S_MOTION);
   present(CHILD_CONFIG, S_CUSTOM);  //
-
+for (int sensor=1, pin=RELAY_1; sensor<=NUMBER_OF_RELAYS;sensor++, pin++) {
+    // Register all sensors to gw (they will be created as child devices)
+    present(sensor, S_LIGHT);
+  }
 }
 
 void loop()
@@ -232,6 +245,41 @@ void loop()
 minute.
   sleep(INTERRUPT1, CHANGE, INTERRUPT2, CHANGE, SLEEP_TIME);
 
+}
+
+void receive(const MyMessage &message) {
+  // We only expect one type of message from controller. But we better check anyway.
+  if (message.type==V_LIGHT) {
+     // Change relay state
+     digitalWrite(message.sensor-1+RELAY_1, message.getBool()?RELAY_ON:RELAY_OFF);
+     // Write some debug info
+     #ifdef MY_DEBUG
+     Serial.print("Incoming change for sensor:");
+     Serial.print(message.sensor);
+     Serial.print(", New status: ");
+     Serial.println(message.getBool());
+     #endif
+   } 
+   else if (message.type == V_VAR1) {
+    OnTime = message.getValue();
+#ifdef MY_DEBUG
+    Serial.print(F("Received OnTime: "));
+    Serial.println(OnTime);
+#endif
+   }
+   else if (message.type == V_VAR2) {
+    MinLux = message.getValue();
+   #ifdef MY_DEBUG
+    Serial.print(F("Received MinLux: "));
+    Serial.println(MinLux);
+#endif}
+   else if (message.type == V_VAR3) {
+    Test1 = message.getString();
+    #ifdef MY_DEBUG
+    Serial.println(F("Received Config:"));
+    Serial.println(Test1);
+#endif
+   }
 }
 
 float getLastPressureSamplesAverage()
