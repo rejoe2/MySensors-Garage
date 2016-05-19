@@ -268,14 +268,14 @@ void receive(const MyMessage &message) {
      #endif
    } 
    else if (message.type == V_VAR1) {
-    OnTime = message.getValue(); //atoi(message.data); als Alternative?
+    OnTime = message.getInt();
 #ifdef MY_DEBUG
     Serial.print(F("Received OnTime: "));
     Serial.println(OnTime);
 #endif
    }
    else if (message.type == V_VAR2) {
-    MinLux = message.getValue();
+    MinLux = message.getInt();
    #ifdef MY_DEBUG
     Serial.print(F("Received MinLux: "));
     Serial.println(MinLux);
