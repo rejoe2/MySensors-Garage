@@ -268,7 +268,7 @@ void receive(const MyMessage &message) {
      #endif
    } 
    else if (message.type == V_VAR1) {
-    OnTime = message.getValue();
+    OnTime = message.getValue(); //atoi(message.data); als Alternative?
 #ifdef MY_DEBUG
     Serial.print(F("Received OnTime: "));
     Serial.println(OnTime);
