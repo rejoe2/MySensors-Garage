@@ -1,8 +1,8 @@
 /**
    The MySensors Arduino library handles the wireless radio link and protocol
    between your home built sensors/actuators and HA controller of choice.
-   The sensors forms a self healing radio network with optional repeaters. 
-   Each repeater and gateway builds a routing tables in EEPROM which keeps track of 
+   The sensors forms a self healing radio network with optional repeaters.
+   Each repeater and gateway builds a routing tables in EEPROM which keeps track of
    the network topology allowing messages to be routed to nodes.
 
    Created by Henrik Ekblad <henrik.ekblad@mysensors.org>
@@ -58,24 +58,23 @@ MyMessage mTest1(CHILD_CONFIG, V_VAR3);   //Test funktionality for oher projects
 //MyMessage mTest2(CHILD_CONFIG, V_VAR4);   //#2
 //MyMessage mTest3(CHILD_CONFIG, V_VAR5);   //#3
 
-uint16_t OnTime = 300; // Default on-time in case of motion: 5 minutes
-uint16_t MinLux = 800; // Default lowest light level for switch-on in case of motion detection
-char* Test1 ="";
+uint16_t OnTime; // Default on-time in case of motion: 5 minutes
+uint16_t MinLux; // Default lowest light level for switch-on in case of motion detection
+char* Test1;
 //char* Test2 ="";
 //char* Test3 ="";
 
-const float ALTITUDE = 200; // <-- adapt this value to your own location's 
-altitude.
+const float ALTITUDE = 200; // <-- adapt this value to your own location's altitude.
 
 #define BARO_CHILD 10
 #define TEMP_CHILD 11
 #define CHILD_ID_LIGHT 12
-// Sleep time between reads (in seconds). Do not change this value as the 
-forecast algorithm needs a sample every minute.
+// Sleep time between reads (in seconds). Do not change this value as the forecast algorithm needs a sample every minute.
 const unsigned long SLEEP_TIME = 60000;
 
-const char *weather[] = { "stable", "sunny", "cloudy", "unstable", 
-"thunderstorm", "unknown" };
+const char *weather[] = { "stable", "sunny", "cloudy", "unstable",
+                          "thunderstorm", "unknown"
+                        };
 enum FORECAST
 {
   STABLE = 0,     // "Stable Weather Pattern"
@@ -95,8 +94,7 @@ int lastForecast = -1;
 const int LAST_SAMPLES_COUNT = 5;
 float lastPressureSamples[LAST_SAMPLES_COUNT];
 
-// this CONVERSION_FACTOR is used to convert from Pa to kPa in forecast 
-algorithm
+// this CONVERSION_FACTOR is used to convert from Pa to kPa in forecast algorithm
 // get kPa/h be dividing hPa by 10
 #define CONVERSION_FACTOR (1.0/10.0)
 
@@ -120,17 +118,13 @@ BH1750 lightSensor;
 // transmitting LUX light level.
 MyMessage msgLux(CHILD_ID_LIGHT, V_LIGHT_LEVEL);
 // MyMessage msg(CHILD_ID_LIGHT, V_LEVEL);
-uint16_t lastlux;
+uint16_t lastlux = 0;
 
-#define DIGITAL_INPUT_SENSOR1 2   // The digital input you attached your 
-motion sensor.  (Only 2 and 3 generates interrupt!)
-#define INTERRUPT1 DIGITAL_INPUT_SENSOR1-2 // Usually the interrupt = pin -2 
-(on uno/nano anyway)
+#define DIGITAL_INPUT_SENSOR1 2   // The digital input you attached your motion sensor.  (Only 2 and 3 generates interrupt!)
+#define INTERRUPT1 DIGITAL_INPUT_SENSOR1-2 // Usually the interrupt = pin -2 (on uno/nano anyway)
 #define CHILD_ID_M1 20   // Id of the first motion sensor child
-#define DIGITAL_INPUT_SENSOR2 3   // The digital input you attached your 
-motion sensor.  (Only 2 and 3 generates interrupt!)
-#define INTERRUPT2 DIGITAL_INPUT_SENSOR2-2 // Usually the interrupt = pin -2 
-(on uno/nano anyway)
+#define DIGITAL_INPUT_SENSOR2 3   // The digital input you attached your motion sensor.  (Only 2 and 3 generates interrupt!)
+#define INTERRUPT2 DIGITAL_INPUT_SENSOR2-2 // Usually the interrupt = pin -2 (on uno/nano anyway)
 #define CHILD_ID_M2 21   // Id of the 2. sensor child
 MyMessage msg_M1(CHILD_ID_M1, V_TRIPPED);
 MyMessage msg_M2(CHILD_ID_M2, V_TRIPPED);
@@ -139,7 +133,10 @@ MyMessage msg_M2(CHILD_ID_M2, V_TRIPPED);
 #define NUMBER_OF_RELAYS 1 // Total number of attached relays
 #define RELAY_ON 1
 #define RELAY_OFF 0
-MyMessage msgRelay(RELAY_1,V_LIGHT);
+boolean onOff = false;
+MyMessage msgRelay(RELAY_1 - 3, V_LIGHT);
+uint8_t switchtime ;
+uint8_t roundscounter = 0;
 
 void setup()
 {
@@ -149,21 +146,22 @@ void setup()
   {
     Serial.println("Could not find a valid BMP085 sensor, check wiring!");
     while (1) {}
-  }
+  };
   metric = getConfig().isMetric;
   pinMode(DIGITAL_INPUT_SENSOR1, INPUT);      // sets the motion sensor digital pin as input
   pinMode(DIGITAL_INPUT_SENSOR2, INPUT);      // sets the motion sensor digital pin as input
 
-  for (int sensor=1, pin=RELAY_1; sensor<=NUMBER_OF_RELAYS;sensor++, pin++) {
+  for (int sensor = 1, pin = RELAY_1; sensor <= NUMBER_OF_RELAYS; sensor++, pin++) {
     // Then set relay pins in output mode
-    pinMode(pin, OUTPUT);   
-    // Set all relays to off 
+    pinMode(pin, OUTPUT);
+    // Set all relays to off
     digitalWrite(pin, RELAY_OFF);
-  }
-  for (int i=1, i<=5, i++) {
-  request(CHILD_CONFIG, V_VAR[i]]);
-  }
-}
+  };
+  request(CHILD_CONFIG, V_VAR1);
+  request(CHILD_CONFIG, V_VAR2);
+  request(CHILD_CONFIG, V_VAR3);
+
+};
 
 void presentation()  {
   // Send the sketch version information to the gateway and Controller
@@ -176,11 +174,11 @@ void presentation()  {
   present(CHILD_ID_M1, S_MOTION);
   present(CHILD_ID_M2, S_MOTION);
   present(CHILD_CONFIG, S_CUSTOM);  //
-for (int sensor=1, pin=RELAY_1; sensor<=NUMBER_OF_RELAYS;sensor++, pin++) {
+  for (int sensor = 1, pin = RELAY_1; sensor <= NUMBER_OF_RELAYS; sensor++, pin++) {
     // Register all sensors to gw (they will be created as child devices)
     present(sensor, S_LIGHT);
-  }
-}
+  };
+};
 
 void loop()
 {
@@ -188,10 +186,10 @@ void loop()
 #ifdef MY_DEBUG
   Serial.println(lux);
 #endif
-  if (lux != lastlux && digital.read(RELAY_1) == (RELAY_OFF ? LOW:HIGH)) {
+  if (lux != lastlux && onOff == true) {
     send(msgLux.set(lux));
     lastlux = lux;
-  }
+  };
 
   // Read digital motion value
   boolean tripped1 = digitalRead(DIGITAL_INPUT_SENSOR1) == HIGH;
@@ -202,12 +200,20 @@ void loop()
   send(msg_M1.set(tripped1 ? "1" : "0")); // Send tripped values to gw
   send(msg_M2.set(tripped2 ? "1" : "0"));
   if (lastlux < MinLux && tripped1 ) {
-     digitalWrite(RELAY_1, RELAY_ON);
-     send(msgRelay.set(true));
-     sleep(OnTime*1000);
-     digitalWrite(RELAY_1, RELAY_OFF);
-     send(msgRelay.set(false));
+    digitalWrite(RELAY_1, RELAY_ON);
+    send(msgRelay.set(true));
+    onOff = true;
+    switchtime = 0;
+  };
+  Serial.println(switchtime);
+  Serial.println(OnTime);
+
+  if (switchtime > OnTime && !tripped1 ) {
+    digitalWrite(RELAY_1, RELAY_OFF);
+    send(msgRelay.set(false));
+    onOff = false;
   }
+  else switchtime++;
 
   float pressure = bmp.readSealevelPressure(ALTITUDE) / 100.0;
   float temperature = bmp.readTemperature();
@@ -216,7 +222,7 @@ void loop()
   {
     // Convert to fahrenheit
     temperature = temperature * 9.0 / 5.0 + 32.0;
-  }
+  };
 
   int forecast = sample(pressure);
 #ifdef MY_DEBUG
@@ -234,59 +240,71 @@ void loop()
   {
     send(tempMsg.set(temperature, 1));
     lastTemp = temperature;
-  }
+  };
 
   if (pressure != lastPressure)
   {
     send(pressureMsg.set(pressure, 0));
     lastPressure = pressure;
-  }
+  };
 
   if (forecast != lastForecast)
   {
     send(forecastMsg.set(weather[forecast]));
     lastForecast = forecast;
-  }
+  };
 
-  // Sleep until interrupt comes in on motion sensor. Send update every two 
-minute.
+  roundscounter++;
+  //check for configuration update every 10 min
+  if (roundscounter == 10) {
+    request(CHILD_CONFIG, V_VAR1);
+    request(CHILD_CONFIG, V_VAR2);
+    request(CHILD_CONFIG, V_VAR3);
+    roundscounter = 0;
+  }
+  Serial.println(roundscounter);
+  // Sleep until interrupt comes in on motion sensor. Send update every two  minute.
   sleep(INTERRUPT1, CHANGE, INTERRUPT2, CHANGE, SLEEP_TIME);
 
-}
+};
 
 void receive(const MyMessage &message) {
   // We only expect one type of message from controller. But we better check anyway.
-  if (message.type==V_LIGHT) {
-     // Change relay state
-     digitalWrite(message.sensor-1+RELAY_1, message.getBool()?RELAY_ON:RELAY_OFF);
-     // Write some debug info
-     #ifdef MY_DEBUG
-     Serial.print("Incoming change for sensor:");
-     Serial.print(message.sensor);
-     Serial.print(", New status: ");
-     Serial.println(message.getBool());
-     #endif
-   } 
-   else if (message.type == V_VAR1) {
+  if (message.type == V_LIGHT) {
+    // Change relay state
+    digitalWrite(message.sensor - 1 + RELAY_1, message.getBool() ? RELAY_ON : RELAY_OFF);
+    // Write some debug info
+#ifdef MY_DEBUG
+    Serial.print("Incoming change for sensor:");
+    Serial.print(message.sensor);
+    Serial.print(", New status: ");
+    Serial.println(message.getBool());
+#endif
+  }
+  else if (message.type == V_VAR1) {
+    OnTime = 2;
     OnTime = message.getInt();
 #ifdef MY_DEBUG
     Serial.print(F("Received OnTime: "));
     Serial.println(OnTime);
 #endif
-   }
-   else if (message.type == V_VAR2) {
-    MinLux = message.getInt();
-   #ifdef MY_DEBUG
+  }
+  else if (message.type == V_VAR2) {
+    MinLux = 100;
+    MinLux = message.getLong();
+
+#ifdef MY_DEBUG
     Serial.print(F("Received MinLux: "));
     Serial.println(MinLux);
-#endif}
-   else if (message.type == V_VAR3) {
-    Test1 = message.getString();
-    #ifdef MY_DEBUG
+#endif
+  }
+  else if (message.type == V_VAR3) {
+    Test1 = (char*) message.getString();
+#ifdef MY_DEBUG
     Serial.println(F("Received Config:"));
     Serial.println(Test1);
 #endif
-   }
+  }
 }
 
 float getLastPressureSamplesAverage()
@@ -332,8 +350,7 @@ int sample(float pressure)
     }
     else
     {
-      dP_dt = change / 1.5; // divide by 1.5 as this is the difference in time 
-from 0 value.
+      dP_dt = change / 1.5; // divide by 1.5 as this is the difference in time from 0 value.
     }
   }
   else if (minuteCount == 65)
@@ -346,8 +363,7 @@ from 0 value.
     }
     else
     {
-      dP_dt = change / 2; //divide by 2 as this is the difference in time from 
-0 value
+      dP_dt = change / 2; //divide by 2 as this is the difference in time from 0 value
     }
   }
   else if (minuteCount == 95)
@@ -360,8 +376,7 @@ from 0 value.
     }
     else
     {
-      dP_dt = change / 2.5; // divide by 2.5 as this is the difference in time 
-from 0 value
+      dP_dt = change / 2.5; // divide by 2.5 as this is the difference in time from 0 value
     }
   }
   else if (minuteCount == 125)
@@ -375,8 +390,7 @@ from 0 value
     }
     else
     {
-      dP_dt = change / 3; // divide by 3 as this is the difference in time 
-from 0 value
+      dP_dt = change / 3; // divide by 3 as this is the difference in time from 0 value
     }
   }
   else if (minuteCount == 155)
@@ -389,8 +403,7 @@ from 0 value
     }
     else
     {
-      dP_dt = change / 3.5; // divide by 3.5 as this is the difference in time 
-from 0 value
+      dP_dt = change / 3.5; // divide by 3.5 as this is the difference in time from 0 value
     }
   }
   else if (minuteCount == 185)
@@ -403,18 +416,14 @@ from 0 value
     }
     else
     {
-      dP_dt = change / 4; // divide by 4 as this is the difference in time 
-from 0 value
+      dP_dt = change / 4; // divide by 4 as this is the difference in time from 0 value
     }
-    pressureAvg = pressureAvg2; // Equating the pressure at 0 to the pressure 
-at 2 hour after 3 hours have past.
-    firstRound = false; // flag to let you know that this is on the past 3 
-hour mark. Initialized to 0 outside main loop.
+    pressureAvg = pressureAvg2; // Equating the pressure at 0 to the pressure at 2 hour after 3 hours have past.
+    firstRound = false; // flag to let you know that this is on the past 3 hour mark. Initialized to 0 outside main loop.
   }
 
   int forecast = UNKNOWN;
-  if (minuteCount < 35 && firstRound) //if time is less than 35 min on the 
-first 3 hour interval.
+  if (minuteCount < 35 && firstRound) //if time is less than 35 min on the first 3 hour interval.
   {
     forecast = UNKNOWN;
   }
