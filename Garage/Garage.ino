@@ -58,14 +58,18 @@ MyMessage mTest1(CHILD_CONFIG, V_VAR3);   //Test funktionality for oher projects
 //MyMessage mTest2(CHILD_CONFIG, V_VAR4);   //#2
 //MyMessage mTest3(CHILD_CONFIG, V_VAR5);   //#3
 
-uint16_t OnTime; // Default on-time in case of motion: 5 minutes
-uint16_t MinLux; // Default lowest light level for switch-on in case of motion detection
+uint16_t OnTime = 600; // Default on-time in case of motion: 5 minutes
+uint16_t MinLux = 100; // Default lowest light level for switch-on in case of motion detection
 char* Test1;
 //char* Test2 ="";
 //char* Test3 ="";
+boolean tripped1 = false;
+boolean tripped2 = false;
+
 
 const float ALTITUDE = 200; // <-- adapt this value to your own location's altitude.
 
+#define SLEEP_MODE false        // on-the-fly configuration can only be received when sleep mode is false.
 #define BARO_CHILD 10
 #define TEMP_CHILD 11
 #define CHILD_ID_LIGHT 12
@@ -150,6 +154,9 @@ void setup()
   metric = getConfig().isMetric;
   pinMode(DIGITAL_INPUT_SENSOR1, INPUT);      // sets the motion sensor digital pin as input
   pinMode(DIGITAL_INPUT_SENSOR2, INPUT);      // sets the motion sensor digital pin as input
+  attachInterrupt(digitalPinToInterrupt(DIGITAL_INPUT_SENSOR1), onMotion1, CHANGE); 
+  attachInterrupt(digitalPinToInterrupt(DIGITAL_INPUT_SENSOR2), onMotion2, CHANGE); 
+  lastSend=millis(); 
 
   for (int sensor = 1, pin = RELAY_1; sensor <= NUMBER_OF_RELAYS; sensor++, pin++) {
     // Then set relay pins in output mode
@@ -191,20 +198,6 @@ void loop()
     lastlux = lux;
   };
 
-  // Read digital motion value
-  boolean tripped1 = digitalRead(DIGITAL_INPUT_SENSOR1) == HIGH;
-  boolean tripped2 = digitalRead(DIGITAL_INPUT_SENSOR2) == HIGH;
-
-  Serial.println(tripped1);
-  Serial.println(tripped2);
-  send(msg_M1.set(tripped1 ? "1" : "0")); // Send tripped values to gw
-  send(msg_M2.set(tripped2 ? "1" : "0"));
-  if (lastlux < MinLux && tripped1 ) {
-    digitalWrite(RELAY_1, RELAY_ON);
-    send(msgRelay.set(true));
-    onOff = true;
-    switchtime = 0;
-  };
   Serial.println(switchtime);
   Serial.println(OnTime);
 
@@ -263,10 +256,30 @@ void loop()
     roundscounter = 0;
   }
   Serial.println(roundscounter);
-  // Sleep until interrupt comes in on motion sensor. Send update every two  minute.
-  sleep(INTERRUPT1, CHANGE, INTERRUPT2, CHANGE, SLEEP_TIME);
+  // Do nothing until next Sleep until interrupt comes in on motion sensor. Send update every two  minute.
+  wait(SLEEP_TIME);
 
 };
+
+void onMotion1() {
+ // Read digital motion value
+  tripped1 = digitalRead(DIGITAL_INPUT_SENSOR1) == HIGH;
+  Serial.println(tripped1);
+  send(msg_M1.set(tripped1 ? "1" : "0")); // Send tripped values to gw
+    if (lastlux < MinLux && tripped1 ) {
+    digitalWrite(RELAY_1, RELAY_ON);
+    send(msgRelay.set(true));
+    onOff = true;
+    switchtime = 0;
+  };
+} 
+
+void onMotion2() {
+ // Read digital motion value
+  tripped2 = digitalRead(DIGITAL_INPUT_SENSOR2) == HIGH;
+  Serial.println(tripped2);
+  send(msg_M2.set(tripped2 ? "1" : "0"));
+}
 
 void receive(const MyMessage &message) {
   // We only expect one type of message from controller. But we better check anyway.
@@ -282,7 +295,6 @@ void receive(const MyMessage &message) {
 #endif
   }
   else if (message.type == V_VAR1) {
-    OnTime = 2;
     OnTime = message.getInt();
 #ifdef MY_DEBUG
     Serial.print(F("Received OnTime: "));
@@ -290,9 +302,7 @@ void receive(const MyMessage &message) {
 #endif
   }
   else if (message.type == V_VAR2) {
-    MinLux = 100;
     MinLux = message.getLong();
-
 #ifdef MY_DEBUG
     Serial.print(F("Received MinLux: "));
     Serial.println(MinLux);
@@ -452,13 +462,14 @@ int sample(float pressure)
     forecast = UNKNOWN;
   }
 
-  // uncomment when debugging
-  //Serial.print(F("Forecast at minute "));
-  //Serial.print(minuteCount);
-  //Serial.print(F(" dP/dt = "));
-  //Serial.print(dP_dt);
-  //Serial.print(F("kPa/h --> "));
-  //Serial.println(weather[forecast]);
+#ifdef MY_DEBUG
+  Serial.print(F("Forecast at minute "));
+  Serial.print(minuteCount);
+  Serial.print(F(" dP/dt = "));
+  Serial.print(dP_dt);
+  Serial.print(F("kPa/h --> "));
+  Serial.println(weather[forecast]);
+#endif
 
   return forecast;
 }
