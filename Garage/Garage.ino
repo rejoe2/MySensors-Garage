@@ -39,7 +39,7 @@
 
 
 // Enable debug prints to serial monitor
-#define MY_DEBUG
+//#define MY_DEBUG
 
 // Enable and select radio type attached
 #define MY_RADIO_NRF24
@@ -59,7 +59,9 @@ MyMessage mTest1(CHILD_CONFIG, V_VAR3);   //Test funktionality for oher projects
 //MyMessage mTest3(CHILD_CONFIG, V_VAR5);   //#3
 
 uint16_t OnTime = 600; // Default on-time in case of motion: 5 minutes
-uint16_t MinLux = 100; // Default lowest light level for switch-on in case of motion detection
+uint16_t MinLux = 100; // Default highest light level for switch-on in case of motion detection
+uint16_t lux = 2; // Default highest light level for switch-on in case of motion detection
+
 char* Test1;
 //char* Test2 ="";
 //char* Test3 ="";
@@ -69,7 +71,7 @@ boolean tripped2 = false;
 
 const float ALTITUDE = 200; // <-- adapt this value to your own location's altitude.
 
-#define SLEEP_MODE false        // on-the-fly configuration can only be received when sleep mode is false.
+#define SLEEP_MODE false // on-the-fly configuration can only be received when sleep mode is false.
 #define BARO_CHILD 10
 #define TEMP_CHILD 11
 #define CHILD_ID_LIGHT 12
@@ -120,8 +122,8 @@ BH1750 lightSensor;
 // V_LIGHT_LEVEL should only be used for uncalibrated light level 0-100%.
 // If your controller supports the new V_LEVEL variable, use this instead for
 // transmitting LUX light level.
-MyMessage msgLux(CHILD_ID_LIGHT, V_LIGHT_LEVEL);
-// MyMessage msg(CHILD_ID_LIGHT, V_LEVEL);
+//MyMessage msgLux(CHILD_ID_LIGHT, V_LIGHT_LEVEL);
+MyMessage msgLux(CHILD_ID_LIGHT, V_LEVEL);
 uint16_t lastlux = 0;
 
 #define DIGITAL_INPUT_SENSOR1 2   // The digital input you attached your motion sensor.  (Only 2 and 3 generates interrupt!)
@@ -139,8 +141,8 @@ MyMessage msg_M2(CHILD_ID_M2, V_TRIPPED);
 #define RELAY_OFF 0
 boolean onOff = false;
 MyMessage msgRelay(RELAY_1 - 3, V_LIGHT);
-uint8_t switchtime ;
-uint8_t roundscounter = 0;
+uint16_t switchtime = millis();
+uint16_t lastMeasureTime = millis();
 
 void setup()
 {
@@ -154,9 +156,9 @@ void setup()
   metric = getConfig().isMetric;
   pinMode(DIGITAL_INPUT_SENSOR1, INPUT);      // sets the motion sensor digital pin as input
   pinMode(DIGITAL_INPUT_SENSOR2, INPUT);      // sets the motion sensor digital pin as input
-  attachInterrupt(digitalPinToInterrupt(DIGITAL_INPUT_SENSOR1), onMotion1, CHANGE); 
-  attachInterrupt(digitalPinToInterrupt(DIGITAL_INPUT_SENSOR2), onMotion2, CHANGE); 
-  lastSend=millis(); 
+  attachInterrupt(digitalPinToInterrupt(DIGITAL_INPUT_SENSOR1), onMotion1, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(DIGITAL_INPUT_SENSOR2), onMotion2, CHANGE);
+  uint16_t lastSend = millis();
 
   for (int sensor = 1, pin = RELAY_1; sensor <= NUMBER_OF_RELAYS; sensor++, pin++) {
     // Then set relay pins in output mode
@@ -189,97 +191,99 @@ void presentation()  {
 
 void loop()
 {
-  uint16_t lux = lightSensor.readLightLevel();// Get Lux value
-#ifdef MY_DEBUG
-  Serial.println(lux);
-#endif
-  if (lux != lastlux && onOff == true) {
-    send(msgLux.set(lux));
-    lastlux = lux;
-  };
-
-  Serial.println(switchtime);
-  Serial.println(OnTime);
-
-  if (switchtime > OnTime && !tripped1 ) {
+  uint16_t jetzt = millis();
+  if (jetzt - switchtime > OnTime * 1000.0 && onOff ) {// && !tripped1 && onOff ) {
     digitalWrite(RELAY_1, RELAY_OFF);
     send(msgRelay.set(false));
     onOff = false;
-  }
-  else switchtime++;
-
-  float pressure = bmp.readSealevelPressure(ALTITUDE) / 100.0;
-  float temperature = bmp.readTemperature();
-
-  if (!metric)
-  {
-    // Convert to fahrenheit
-    temperature = temperature * 9.0 / 5.0 + 32.0;
   };
 
-  int forecast = sample(pressure);
+  if (jetzt - lastMeasureTime > SLEEP_TIME) {
+    if (!onOff ) {
+      uint16_t lux = lightSensor.readLightLevel();// Get Lux value
 #ifdef MY_DEBUG
-  Serial.print("Temperature = ");
-  Serial.print(temperature);
-  Serial.println(metric ? " *C" : " *F");
-  Serial.print("Pressure = ");
-  Serial.print(pressure);
-  Serial.println(" hPa");
-  Serial.print("Forecast = ");
-  Serial.println(weather[forecast]);
+      Serial.println(lux);
+#endif
+      if (lux != lastlux) {
+        send(msgLux.set(lux));
+        lastlux = lux;
+      };
+    };
+    float pressure = bmp.readSealevelPressure(ALTITUDE) / 100.0;
+    float temperature = bmp.readTemperature();
+
+    if (!metric)
+    {
+      // Convert to fahrenheit
+      temperature = temperature * 9.0 / 5.0 + 32.0;
+    };
+
+    int forecast = sample(pressure);
+#ifdef MY_DEBUG
+    Serial.print("Temperature = ");
+    Serial.print(temperature);
+    Serial.println(metric ? " *C" : " *F");
+    Serial.print("Pressure = ");
+    Serial.print(pressure);
+    Serial.println(" hPa");
+    Serial.print("Forecast = ");
+    Serial.println(weather[forecast]);
 #endif
 
-  if (temperature != lastTemp)
-  {
-    send(tempMsg.set(temperature, 1));
-    lastTemp = temperature;
+    if (temperature != lastTemp)
+    {
+      send(tempMsg.set(temperature, 1));
+      lastTemp = temperature;
+    };
+
+    if (pressure != lastPressure)
+    {
+      send(pressureMsg.set(pressure, 0));
+      lastPressure = pressure;
+    };
+
+    if (forecast != lastForecast)
+    {
+      send(forecastMsg.set(weather[forecast]));
+      lastForecast = forecast;
+    };
+
+    //check for configuration update every 10 min
+    /*if (roundscounter == 10) {
+      request(CHILD_CONFIG, V_VAR1);
+      request(CHILD_CONFIG, V_VAR2);
+      request(CHILD_CONFIG, V_VAR3);
+      roundscounter = 0;
+      }*/
+    lastMeasureTime = jetzt;
   };
-
-  if (pressure != lastPressure)
-  {
-    send(pressureMsg.set(pressure, 0));
-    lastPressure = pressure;
-  };
-
-  if (forecast != lastForecast)
-  {
-    send(forecastMsg.set(weather[forecast]));
-    lastForecast = forecast;
-  };
-
-  roundscounter++;
-  //check for configuration update every 10 min
-  if (roundscounter == 10) {
-    request(CHILD_CONFIG, V_VAR1);
-    request(CHILD_CONFIG, V_VAR2);
-    request(CHILD_CONFIG, V_VAR3);
-    roundscounter = 0;
-  }
-  Serial.println(roundscounter);
-  // Do nothing until next Sleep until interrupt comes in on motion sensor. Send update every two  minute.
-  wait(SLEEP_TIME);
-
 };
 
 void onMotion1() {
- // Read digital motion value
+  // Read digital motion value
   tripped1 = digitalRead(DIGITAL_INPUT_SENSOR1) == HIGH;
+#ifdef MY_DEBUG
+  Serial.print("M1: ");
   Serial.println(tripped1);
+#endif
   send(msg_M1.set(tripped1 ? "1" : "0")); // Send tripped values to gw
-    if (lastlux < MinLux && tripped1 ) {
+  if (lastlux < MinLux && tripped1 ) {
     digitalWrite(RELAY_1, RELAY_ON);
     send(msgRelay.set(true));
     onOff = true;
-    switchtime = 0;
+    switchtime = millis();
   };
-} 
+};
 
 void onMotion2() {
- // Read digital motion value
+  // Read digital motion value
   tripped2 = digitalRead(DIGITAL_INPUT_SENSOR2) == HIGH;
+#ifdef MY_DEBUG
+  Serial.print("M2: ");
   Serial.println(tripped2);
+#endif
   send(msg_M2.set(tripped2 ? "1" : "0"));
-}
+};
 
 void receive(const MyMessage &message) {
   // We only expect one type of message from controller. But we better check anyway.
@@ -295,7 +299,7 @@ void receive(const MyMessage &message) {
 #endif
   }
   else if (message.type == V_VAR1) {
-    OnTime = message.getInt();
+    OnTime = message.getLong();
 #ifdef MY_DEBUG
     Serial.print(F("Received OnTime: "));
     Serial.println(OnTime);
@@ -314,8 +318,8 @@ void receive(const MyMessage &message) {
     Serial.println(F("Received Config:"));
     Serial.println(Test1);
 #endif
-  }
-}
+  };
+};
 
 float getLastPressureSamplesAverage()
 {
@@ -327,9 +331,7 @@ float getLastPressureSamplesAverage()
   lastPressureSamplesAverage /= LAST_SAMPLES_COUNT;
 
   return lastPressureSamplesAverage;
-}
-
-
+};
 
 // Algorithm found here
 // http://www.freescale.com/files/sensors/doc/app_note/AN3914.pdf
@@ -473,3 +475,4 @@ int sample(float pressure)
 
   return forecast;
 }
+
