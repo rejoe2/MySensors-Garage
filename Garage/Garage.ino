@@ -22,7 +22,7 @@
    Version 1.0 - idefix
 
    DESCRIPTION
-   Arduino BH1750FVI Light sensor
+   Basic Sketch was Arduino BH1750FVI Light sensor
    communicate using I2C Protocol
    this library enable 2 slave device addresses
    Main address  0x23
@@ -35,6 +35,9 @@
      SCL  >>> A5
      SDA  >>> A4
    http://www.mysensors.org/build/light
+   Added: BMP180 Pressure + Temp Sensor (also I2C)
+   Relay
+   2 x Motion with different interrupt routines
 */
 
 
@@ -53,16 +56,16 @@
 
 #define CHILD_CONFIG 100
 MyMessage mOnTime(CHILD_CONFIG, V_VAR1);   //Receive configuration: On-Time
-MyMessage mMinLux(CHILD_CONFIG, V_VAR2);   //Light Level
-MyMessage mTest1(CHILD_CONFIG, V_VAR3);   //Test funktionality for oher projects
+MyMessage mMinLux(CHILD_CONFIG, V_VAR2);   //Config: Lowest Light Level for turning on LED
+//MyMessage mTest1(CHILD_CONFIG, V_VAR3);   //Test funktionality for oher projects
 //MyMessage mTest2(CHILD_CONFIG, V_VAR4);   //#2
 //MyMessage mTest3(CHILD_CONFIG, V_VAR5);   //#3
 
 uint16_t OnTime = 600; // Default on-time in case of motion: 5 minutes
 uint16_t MinLux = 100; // Default highest light level for switch-on in case of motion detection
-uint16_t lux = 2; // Default highest light level for switch-on in case of motion detection
+uint16_t lux = 2; // Default light level in case sensor is out of order
 
-char* Test1;
+//char* Test1;
 //char* Test2 ="";
 //char* Test3 ="";
 boolean tripped1 = false;
@@ -121,18 +124,19 @@ BH1750 lightSensor;
 
 // V_LIGHT_LEVEL should only be used for uncalibrated light level 0-100%.
 // If your controller supports the new V_LEVEL variable, use this instead for
-// transmitting LUX light level.
-//MyMessage msgLux(CHILD_ID_LIGHT, V_LIGHT_LEVEL);
-MyMessage msgLux(CHILD_ID_LIGHT, V_LEVEL);
+// transmitting LUX light level. (not yet supported by FHEM)
+MyMessage msgLux(CHILD_ID_LIGHT, V_LIGHT_LEVEL);
+//MyMessage msgLux(CHILD_ID_LIGHT, V_LEVEL);
 uint16_t lastlux = 0;
+uint16_t lastMeasureTime = millis();
 
 #define DIGITAL_INPUT_SENSOR1 2   // The digital input you attached your motion sensor.  (Only 2 and 3 generates interrupt!)
 #define INTERRUPT1 DIGITAL_INPUT_SENSOR1-2 // Usually the interrupt = pin -2 (on uno/nano anyway)
 #define CHILD_ID_M1 20   // Id of the first motion sensor child
+MyMessage msg_M1(CHILD_ID_M1, V_TRIPPED);
 #define DIGITAL_INPUT_SENSOR2 3   // The digital input you attached your motion sensor.  (Only 2 and 3 generates interrupt!)
 #define INTERRUPT2 DIGITAL_INPUT_SENSOR2-2 // Usually the interrupt = pin -2 (on uno/nano anyway)
 #define CHILD_ID_M2 21   // Id of the 2. sensor child
-MyMessage msg_M1(CHILD_ID_M1, V_TRIPPED);
 MyMessage msg_M2(CHILD_ID_M2, V_TRIPPED);
 
 #define RELAY_1  4  // Arduino Digital I/O pin number for first relay (second on pin+1 etc)
@@ -142,7 +146,6 @@ MyMessage msg_M2(CHILD_ID_M2, V_TRIPPED);
 boolean onOff = false;
 MyMessage msgRelay(RELAY_1 - 3, V_LIGHT);
 uint16_t switchtime = millis();
-uint16_t lastMeasureTime = millis();
 
 void setup()
 {
@@ -155,11 +158,10 @@ void setup()
   };
   metric = getConfig().isMetric;
   pinMode(DIGITAL_INPUT_SENSOR1, INPUT);      // sets the motion sensor digital pin as input
-  pinMode(DIGITAL_INPUT_SENSOR2, INPUT);      // sets the motion sensor digital pin as input
   attachInterrupt(digitalPinToInterrupt(DIGITAL_INPUT_SENSOR1), onMotion1, CHANGE);
+  pinMode(DIGITAL_INPUT_SENSOR2, INPUT);      // sets the motion sensor digital pin as input
   attachInterrupt(digitalPinToInterrupt(DIGITAL_INPUT_SENSOR2), onMotion2, CHANGE);
-  uint16_t lastSend = millis();
-
+  
   for (int sensor = 1, pin = RELAY_1; sensor <= NUMBER_OF_RELAYS; sensor++, pin++) {
     // Then set relay pins in output mode
     pinMode(pin, OUTPUT);
@@ -168,13 +170,13 @@ void setup()
   };
   request(CHILD_CONFIG, V_VAR1);
   request(CHILD_CONFIG, V_VAR2);
-  request(CHILD_CONFIG, V_VAR3);
+//  request(CHILD_CONFIG, V_VAR3);
 
 };
 
 void presentation()  {
   // Send the sketch version information to the gateway and Controller
-  sendSketchInfo("Garage", "0.1");
+  sendSketchInfo("Garage", "0.2");
 
   // Register all sensors to gateway (they will be created as child devices)
   present(CHILD_ID_LIGHT, S_LIGHT_LEVEL);
@@ -247,15 +249,7 @@ void loop()
       send(forecastMsg.set(weather[forecast]));
       lastForecast = forecast;
     };
-
-    //check for configuration update every 10 min
-    /*if (roundscounter == 10) {
-      request(CHILD_CONFIG, V_VAR1);
-      request(CHILD_CONFIG, V_VAR2);
-      request(CHILD_CONFIG, V_VAR3);
-      roundscounter = 0;
-      }*/
-    lastMeasureTime = jetzt;
+  lastMeasureTime = jetzt;
   };
 };
 
@@ -310,13 +304,6 @@ void receive(const MyMessage &message) {
 #ifdef MY_DEBUG
     Serial.print(F("Received MinLux: "));
     Serial.println(MinLux);
-#endif
-  }
-  else if (message.type == V_VAR3) {
-    Test1 = (char*) message.getString();
-#ifdef MY_DEBUG
-    Serial.println(F("Received Config:"));
-    Serial.println(Test1);
 #endif
   };
 };
