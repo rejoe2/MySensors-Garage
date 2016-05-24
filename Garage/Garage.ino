@@ -194,7 +194,7 @@ void presentation()  {
 void loop()
 {
   uint16_t jetzt = millis();
-  if (jetzt - switchtime > OnTime * 1000.0 && onOff ) {// && !tripped1 && onOff ) {
+  if (jetzt - switchtime > OnTime * 1000.0 ) {// && !tripped1 && onOff ) {
     digitalWrite(RELAY_1, RELAY_OFF);
     send(msgRelay.set(false));
     onOff = false;
